@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sneek HMAC + K1 Demo</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Dummy full-stack prototype</p>
+          <h1>Sneek Authentication Demo</h1>
+          <p class="lede">
+            This demo simulates your proposed flow: client backend creates an HMAC with K1,
+            encrypts the payload for Sneek, renders a QR, and waits for Sneek to verify and
+            callback.
+          </p>
+        </div>
+        <div class="hero-card">
+          <p class="hero-label">Core verification gates</p>
+          <ul class="hero-list">
+            <li>HMAC check</li>
+            <li>KID/origin check</li>
+            <li>Session TTL check</li>
+            <li>Replay prevention</li>
+            <li>Signed callback check</li>
+          </ul>
+        </div>
+      </header>
+
+      <main class="dashboard">
+        <section class="panel action-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-label">Step 1</p>
+              <h2>Client Website</h2>
+            </div>
+            <button id="loginButton" class="primary-button">Login with Sneak</button>
+          </div>
+          <p class="section-text">
+            Clicking this button asks the demo client backend to generate a session, compute the
+            HMAC with K1, encrypt the payload with Sneek's public key, and return a QR code.
+          </p>
+          <div class="quick-facts" id="quickFacts">
+            <div class="fact">
+              <span class="fact-label">Client ID</span>
+              <strong id="clientIdLabel">spotify_123</strong>
+            </div>
+            <div class="fact">
+              <span class="fact-label">KID</span>
+              <strong id="kidLabel">spotify.com</strong>
+            </div>
+            <div class="fact">
+              <span class="fact-label">Scan API</span>
+              <strong id="scanApiLabel">Loading...</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="grid two-up">
+          <article class="panel qr-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="section-label">Steps 2 to 4</p>
+                <h2>Generated QR</h2>
+              </div>
+              <span class="status-pill" id="sessionStatusPill">Idle</span>
+            </div>
+            <div class="qr-wrap" id="qrWrap">
+              <p class="empty-state">Generate a session to render the QR code.</p>
+            </div>
+            <div class="session-meta" id="sessionMeta"></div>
+          </article>
+
+          <article class="panel payload-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="section-label">Debug payload</p>
+                <h2>What the client backend created</h2>
+              </div>
+            </div>
+            <div class="copy-block">
+              <div class="copy-heading">
+                <span>HMAC</span>
+                <button class="ghost-button" data-copy-target="hmacValue">Copy</button>
+              </div>
+              <code id="hmacValue">Not generated yet</code>
+            </div>
+            <div class="copy-block">
+              <div class="copy-heading">
+                <span>Encrypted Blob in QR</span>
+                <button class="ghost-button" data-copy-target="encryptedBlobValue">Copy</button>
+              </div>
+              <code id="encryptedBlobValue">Not generated yet</code>
+            </div>
+            <div class="copy-block">
+              <div class="copy-heading">
+                <span>Payload preview before encryption</span>
+              </div>
+              <pre id="payloadPreview">No payload yet</pre>
+            </div>
+          </article>
+        </section>
+
+        <section class="grid two-up">
+          <article class="panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="section-label">Step 5</p>
+                <h2>Postman Request</h2>
+              </div>
+            </div>
+            <p class="section-text">
+              Use this body in Postman to simulate the Sneek mobile app scanning the QR.
+            </p>
+            <div class="copy-block">
+              <div class="copy-heading">
+                <span>POST target</span>
+                <button class="ghost-button" data-copy-target="postmanUrl">Copy</button>
+              </div>
+              <code id="postmanUrl">Loading...</code>
+            </div>
+            <div class="copy-block">
+              <div class="copy-heading">
+                <span>JSON body</span>
+                <button class="ghost-button" data-copy-target="postmanBody">Copy</button>
+              </div>
+              <pre id="postmanBody">Generate a session first.</pre>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="section-label">Current result</p>
+                <h2>Frontend Listener</h2>
+              </div>
+            </div>
+            <div id="resultCard" class="result-card result-idle">
+              <h3>Waiting for authentication</h3>
+              <p>The frontend is polling the client backend for session updates.</p>
+            </div>
+            <div id="userProfileCard" class="user-profile hidden"></div>
+          </article>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading compact">
+            <div>
+              <p class="section-label">Verification timeline</p>
+              <h2>What is happening internally</h2>
+            </div>
+          </div>
+          <div class="gate-grid" id="gateGrid"></div>
+          <div class="timeline" id="timeline"></div>
+        </section>
+      </main>
+    </div>
+
+    <template id="gateTemplate">
+      <div class="gate-card">
+        <span class="gate-name"></span>
+        <strong class="gate-value"></strong>
+      </div>
+    </template>
+
+    <template id="timelineItemTemplate">
+      <article class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-body">
+          <div class="timeline-head">
+            <strong class="timeline-step"></strong>
+            <span class="timeline-status"></span>
+          </div>
+          <p class="timeline-details"></p>
+          <time class="timeline-at"></time>
+        </div>
+      </article>
+    </template>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>
