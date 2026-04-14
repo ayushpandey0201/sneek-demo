@@ -6,7 +6,9 @@ const QRCode = require('qrcode');
 const app = express();
 const PORT = process.env.PORT || 3030;
 const SESSION_TTL_MS = 60 * 1000;
+const CALLBACK_TTL_MS = 60 * 1000;
 const DEMO_MOBILE_TOKEN = 'demo-mobile-token';
+const DEMO_INTROSPECTION_TOKEN = 'demo-introspection-token';
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -38,6 +40,7 @@ const clients = new Map([
 ]);
 
 const sessions = new Map();
+const callbackEventsSeen = new Set();
 
 const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
   modulusLength: 2048,
@@ -55,6 +58,10 @@ function generateSessionId() {
 
 function buildSessionToken() {
   return `web_${crypto.randomBytes(18).toString('hex')}`;
+}
+
+function generateCallbackEventId() {
+  return `cb_${crypto.randomBytes(8).toString('hex')}`;
 }
 
 function sha256Hex(value) {
@@ -140,6 +147,16 @@ function getTimeLeftMs(session) {
   return Math.max(0, new Date(session.expiresAt).getTime() - Date.now());
 }
 
+function isFreshTimestamp(timestamp, maxAgeMs) {
+  const parsed = new Date(timestamp).getTime();
+  if (!Number.isFinite(parsed)) {
+    return false;
+  }
+
+  const ageMs = Math.abs(Date.now() - parsed);
+  return ageMs <= maxAgeMs;
+}
+
 function syncSessionExpiry(session) {
   if (
     session.status === 'pending' &&
@@ -172,6 +189,7 @@ function buildSessionResponse(session) {
     verification: session.verification,
     callbackVerified: session.callbackVerified,
     callbackSignature: session.callbackSignature,
+    callbackEventId: session.callbackEventId,
     sessionToken: session.sessionToken,
     userProfile: session.userProfile,
     auditTrail: session.auditTrail,
@@ -179,6 +197,51 @@ function buildSessionResponse(session) {
 }
 
 function verifyClientCallback({ client, session, callbackPayload, signature }) {
+  if (callbackPayload.sessionId !== session.sessionId || callbackPayload.clientId !== session.clientId) {
+    session.verification.callbackSignature = 'failed';
+    session.status = 'rejected';
+    appendAudit(
+      session,
+      'callback_target',
+      'failed',
+      'Callback clientId/sessionId did not match the active client backend session.',
+    );
+    return {
+      ok: false,
+      message: 'Callback target mismatch.',
+    };
+  }
+
+  if (!callbackPayload.eventId) {
+    session.verification.callbackSignature = 'failed';
+    session.status = 'rejected';
+    appendAudit(session, 'callback_event', 'failed', 'Callback eventId is missing.');
+    return {
+      ok: false,
+      message: 'Missing callback eventId.',
+    };
+  }
+
+  if (!isFreshTimestamp(callbackPayload.timestamp, CALLBACK_TTL_MS)) {
+    session.verification.callbackSignature = 'failed';
+    session.status = 'rejected';
+    appendAudit(session, 'callback_freshness', 'failed', 'Callback timestamp is outside freshness window.');
+    return {
+      ok: false,
+      message: 'Stale callback timestamp.',
+    };
+  }
+
+  if (callbackEventsSeen.has(callbackPayload.eventId)) {
+    session.verification.callbackSignature = 'failed';
+    session.status = 'rejected';
+    appendAudit(session, 'callback_replay', 'failed', 'Callback eventId was already processed.');
+    return {
+      ok: false,
+      message: 'Callback replay detected.',
+    };
+  }
+
   const expectedSignature = signCallbackPayload(callbackPayload, client.callbackSecret);
   const valid = expectedSignature === signature;
 
@@ -192,8 +255,10 @@ function verifyClientCallback({ client, session, callbackPayload, signature }) {
     };
   }
 
+  callbackEventsSeen.add(callbackPayload.eventId);
   session.callbackVerified = true;
   session.callbackSignature = signature;
+  session.callbackEventId = callbackPayload.eventId;
   session.verification.callbackSignature = 'passed';
   session.userProfile = callbackPayload.userProfile;
   session.sessionToken = buildSessionToken();
@@ -211,6 +276,27 @@ function verifyClientCallback({ client, session, callbackPayload, signature }) {
     ok: true,
     message: 'Callback verified and frontend session issued.',
     sessionToken: session.sessionToken,
+    callbackEventId: callbackPayload.eventId,
+  };
+}
+
+function buildIntrospectionResponse({ session, client, txId }) {
+  syncSessionExpiry(session);
+
+  return {
+    ok: true,
+    txId,
+    status: session.status,
+    clientId: session.clientId,
+    kid: session.kid,
+    expiresAt: session.expiresAt,
+    timeLeftMs: getTimeLeftMs(session),
+    verificationContext: {
+      expectedClientId: client.clientId,
+      expectedKid: client.kid,
+      sessionId: session.sessionId,
+      allowProceed: session.status === 'pending',
+    },
   };
 }
 
@@ -228,6 +314,7 @@ app.get('/api/demo/bootstrap', (req, res) => {
     publicKeyPreview: publicKey.split('\n').slice(0, 4).join('\n'),
     postmanTarget: `http://localhost:${PORT}/api/sneek/scan`,
     directCallbackTarget: `http://localhost:${PORT}/api/client/callback`,
+    introspectionTarget: `http://localhost:${PORT}/api/client/introspect`,
     theoryNote:
       'This demo uses a real HMAC-SHA256 over client_id with K1, stores sessions in memory, and simulates the Sneek callback in-process.',
   });
@@ -285,6 +372,7 @@ app.post('/api/client/login', async (req, res) => {
     verification: getVerificationTemplate(),
     callbackVerified: false,
     callbackSignature: null,
+    callbackEventId: null,
     userProfile: null,
     sessionToken: null,
     used: false,
@@ -341,6 +429,58 @@ app.get('/api/client/session/:sessionId', (req, res) => {
     ok: true,
     session: buildSessionResponse(session),
   });
+});
+
+app.post('/api/client/introspect', (req, res) => {
+  const authHeader = req.headers.authorization || '';
+  const expectedAuth = `Bearer ${DEMO_INTROSPECTION_TOKEN}`;
+  if (authHeader !== expectedAuth) {
+    return res.status(401).json({
+      ok: false,
+      error: 'Unauthorized introspection request.',
+    });
+  }
+
+  const txId = req.body?.txId || req.body?.sessionId;
+  const clientId = req.body?.clientId;
+
+  if (!txId || !clientId) {
+    return res.status(400).json({
+      ok: false,
+      error: 'txId and clientId are required.',
+    });
+  }
+
+  const session = sessions.get(txId);
+  const client = clients.get(clientId);
+
+  if (!session || !client) {
+    return res.status(404).json({
+      ok: false,
+      error: 'Unknown introspection target.',
+      txId,
+      clientId,
+    });
+  }
+
+  if (session.clientId !== client.clientId) {
+    return res.status(409).json({
+      ok: false,
+      error: 'Client mismatch for transaction.',
+      txId,
+      sessionClientId: session.clientId,
+      requestedClientId: client.clientId,
+    });
+  }
+
+  appendAudit(
+    session,
+    'client_introspect',
+    'passed',
+    `Sneek introspected tx ${txId} for client ${clientId} before finalizing verification.`,
+  );
+
+  return res.json(buildIntrospectionResponse({ session, client, txId }));
 });
 
 app.post('/api/sneek/scan', (req, res) => {
@@ -562,6 +702,7 @@ app.post('/api/sneek/scan', (req, res) => {
   };
 
   const callbackPayload = {
+    eventId: generateCallbackEventId(),
     clientId: client.clientId,
     kid: client.kid,
     sessionId: session.sessionId,
@@ -602,9 +743,9 @@ app.post('/api/sneek/scan', (req, res) => {
 });
 
 app.post('/api/client/callback', (req, res) => {
-  const { clientId, sessionId, timestamp, userProfile, signature } = req.body || {};
+  const { eventId, clientId, sessionId, timestamp, userProfile, signature } = req.body || {};
 
-  if (!clientId || !sessionId || !timestamp || !userProfile || !signature) {
+  if (!eventId || !clientId || !sessionId || !timestamp || !userProfile || !signature) {
     return res.status(400).json({ ok: false, error: 'Missing callback fields.' });
   }
 
@@ -616,6 +757,7 @@ app.post('/api/client/callback', (req, res) => {
   }
 
   const callbackPayload = {
+    eventId,
     clientId,
     kid: client.kid,
     sessionId,
