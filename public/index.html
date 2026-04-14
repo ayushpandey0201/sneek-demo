@@ -26,6 +26,7 @@
             <li>Session TTL check</li>
             <li>Replay prevention</li>
             <li>Signed callback check</li>
+            <li>Cross-verification (session, payload, blob)</li>
           </ul>
         </div>
       </header>
@@ -37,7 +38,10 @@
               <p class="section-label">Step 1</p>
               <h2>Client Website</h2>
             </div>
-            <button id="loginButton" class="primary-button">Login with Sneak</button>
+            <div class="panel-actions">
+              <button id="newSessionButton" class="secondary-button hidden">New Session</button>
+              <button id="loginButton" class="primary-button">Login with Sneek</button>
+            </div>
           </div>
           <p class="section-text">
             Clicking this button asks the demo client backend to generate a session, compute the
@@ -84,14 +88,14 @@
             <div class="copy-block">
               <div class="copy-heading">
                 <span>HMAC</span>
-                <button class="ghost-button" data-copy-target="hmacValue">Copy</button>
+                <button class="ghost-button" data-copy-target="hmacValue" aria-label="Copy HMAC value">Copy</button>
               </div>
               <code id="hmacValue">Not generated yet</code>
             </div>
             <div class="copy-block">
               <div class="copy-heading">
                 <span>Encrypted Blob in QR</span>
-                <button class="ghost-button" data-copy-target="encryptedBlobValue">Copy</button>
+                <button class="ghost-button" data-copy-target="encryptedBlobValue" aria-label="Copy encrypted blob">Copy</button>
               </div>
               <code id="encryptedBlobValue">Not generated yet</code>
             </div>
@@ -105,7 +109,7 @@
         </section>
 
         <section class="grid two-up">
-          <article class="panel">
+          <article class="panel postman-panel">
             <div class="panel-heading compact">
               <div>
                 <p class="section-label">Step 5</p>
@@ -118,14 +122,14 @@
             <div class="copy-block">
               <div class="copy-heading">
                 <span>POST target</span>
-                <button class="ghost-button" data-copy-target="postmanUrl">Copy</button>
+                <button class="ghost-button" data-copy-target="postmanUrl" aria-label="Copy POST target URL">Copy</button>
               </div>
               <code id="postmanUrl">Loading...</code>
             </div>
             <div class="copy-block">
               <div class="copy-heading">
                 <span>JSON body</span>
-                <button class="ghost-button" data-copy-target="postmanBody">Copy</button>
+                <button class="ghost-button" data-copy-target="postmanBody" aria-label="Copy JSON body">Copy</button>
               </div>
               <pre id="postmanBody">Generate a session first.</pre>
             </div>
@@ -138,7 +142,7 @@
                 <h2>Frontend Listener</h2>
               </div>
             </div>
-            <div id="resultCard" class="result-card result-idle">
+            <div id="resultCard" class="result-card result-idle" role="status" aria-live="polite">
               <h3>Waiting for authentication</h3>
               <p>The frontend is polling the client backend for session updates.</p>
             </div>
@@ -149,11 +153,25 @@
         <section class="panel">
           <div class="panel-heading compact">
             <div>
-              <p class="section-label">Verification timeline</p>
+              <p class="section-label">Verification details</p>
               <h2>What is happening internally</h2>
             </div>
           </div>
-          <div class="gate-grid" id="gateGrid"></div>
+          <div class="gate-summary" id="gateSummary" aria-live="polite">
+            <div class="gate-summary-item">
+              <span class="gate-summary-dot passed"></span>
+              <span>Passed: </span><span class="gate-summary-count" id="gatePassedCount">0</span>
+            </div>
+            <div class="gate-summary-item">
+              <span class="gate-summary-dot failed"></span>
+              <span>Failed: </span><span class="gate-summary-count" id="gateFailedCount">0</span>
+            </div>
+            <div class="gate-summary-item">
+              <span class="gate-summary-dot pending"></span>
+              <span>Pending: </span><span class="gate-summary-count" id="gatePendingCount">0</span>
+            </div>
+          </div>
+          <div id="gateContainer"></div>
           <div class="timeline" id="timeline"></div>
         </section>
       </main>
