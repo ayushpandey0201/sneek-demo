@@ -526,6 +526,11 @@ pre {
   color: var(--accent);
 }
 
+.status-pill[data-state="verifying"] {
+  background: rgba(219, 234, 254, 0.75);
+  color: #1d4ed8;
+}
+
 .status-pill[data-state="authenticated"] {
   background: var(--success-soft);
   color: var(--success);
@@ -740,6 +745,42 @@ pre {
 .gate-summary-count {
   color: var(--muted);
   font-weight: 600;
+}
+
+/* ── Toasts ── */
+
+.toast-root {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  display: grid;
+  gap: 10px;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.toast {
+  min-width: 230px;
+  max-width: 320px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.16);
+  font-size: 0.9rem;
+  color: var(--text);
+  pointer-events: auto;
+  animation: fadeSlideUp 0.2s ease-out both;
+}
+
+.toast.success {
+  border-color: rgba(22, 101, 52, 0.25);
+  background: rgba(220, 252, 231, 0.95);
+}
+
+.toast.error {
+  border-color: rgba(180, 35, 24, 0.25);
+  background: rgba(254, 228, 226, 0.95);
 }
 
 /* ── Responsive ── */

@@ -1,4 +1,8 @@
 const TERMINAL_STATUSES = ['authenticated', 'expired', 'rejected'];
+const CONFIG = {
+  CLIENT_API_BASE: window.__CONFIG__?.CLIENT_API_BASE || 'http://localhost:3000',
+  SNEEK_API_BASE: window.__CONFIG__?.SNEEK_API_BASE || 'http://localhost:4000',
+};
 
 const state = {
   sessionId: null,
@@ -7,6 +11,7 @@ const state = {
   bootstrap: null,
   postmanExample: null,
   pollGeneration: 0,
+  uiPhase: 'idle',
 };
 
 const coreGates = {
@@ -41,6 +46,7 @@ const elements = {
   payloadPreview: document.getElementById('payloadPreview'),
   postmanUrl: document.getElementById('postmanUrl'),
   postmanBody: document.getElementById('postmanBody'),
+  simulateScanButton: document.getElementById('simulateScanButton'),
   resultCard: document.getElementById('resultCard'),
   userProfileCard: document.getElementById('userProfileCard'),
   gateContainer: document.getElementById('gateContainer'),
@@ -49,6 +55,7 @@ const elements = {
   gatePendingCount: document.getElementById('gatePendingCount'),
   timeline: document.getElementById('timeline'),
   sessionStatusPill: document.getElementById('sessionStatusPill'),
+  toastRoot: document.getElementById('toastRoot'),
   gateTemplate: document.getElementById('gateTemplate'),
   timelineItemTemplate: document.getElementById('timelineItemTemplate'),
 };
@@ -69,6 +76,21 @@ async function safeFetchJson(url, options) {
     throw new Error(`HTTP ${res.status}: ${res.statusText}`);
   }
   return res.json();
+}
+
+function showToast(message, type = 'info') {
+  if (!elements.toastRoot) {
+    return;
+  }
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  elements.toastRoot.appendChild(toast);
+
+  window.setTimeout(() => {
+    toast.remove();
+  }, 2200);
 }
 
 function setCopyHandlers() {
@@ -103,8 +125,8 @@ function renderBootstrap(data) {
   state.bootstrap = data;
   elements.clientIdLabel.textContent = data.demoClient?.clientId || '—';
   elements.kidLabel.textContent = data.demoClient?.kid || '—';
-  elements.scanApiLabel.textContent = data.postmanTarget || '—';
-  elements.postmanUrl.textContent = data.postmanTarget || '—';
+  elements.scanApiLabel.textContent = `${CONFIG.SNEEK_API_BASE}/sneek/scan`;
+  elements.postmanUrl.textContent = `${CONFIG.SNEEK_API_BASE}/sneek/scan`;
 }
 
 function renderQr(session) {
@@ -162,8 +184,8 @@ function renderResult(session) {
   if (!session) {
     elements.resultCard.className = 'result-card result-idle';
     elements.resultCard.innerHTML = `
-      <h3>Waiting for authentication</h3>
-      <p>The frontend is polling the client backend for session updates.</p>
+      <h3>Waiting for scan</h3>
+      <p>Generate a session and run a scan to continue the authentication flow.</p>
     `;
     elements.userProfileCard.classList.add('hidden');
     elements.userProfileCard.innerHTML = '';
@@ -174,7 +196,7 @@ function renderResult(session) {
     elements.resultCard.className = 'result-card result-success';
 
     const h3 = document.createElement('h3');
-    h3.textContent = 'Authentication Successful';
+    h3.textContent = 'Authenticated';
     const p = document.createElement('p');
     p.textContent = 'Client backend verified the signed callback and issued a frontend session token.';
     const code = document.createElement('code');
@@ -232,11 +254,19 @@ function renderResult(session) {
     return;
   }
 
-  elements.resultCard.className = 'result-card result-pending';
-  elements.resultCard.innerHTML = `
-    <h3>Waiting for Sneek scan</h3>
-    <p>The frontend is polling and the backend session is still pending.</p>
-  `;
+  if (state.uiPhase === 'verifying') {
+    elements.resultCard.className = 'result-card result-pending';
+    elements.resultCard.innerHTML = `
+      <h3>Verifying...</h3>
+      <p>Sneek is validating the payload and callback signature.</p>
+    `;
+  } else {
+    elements.resultCard.className = 'result-card result-pending';
+    elements.resultCard.innerHTML = `
+      <h3>Waiting for scan</h3>
+      <p>The session is ready. Use Simulate Scan to continue.</p>
+    `;
+  }
   elements.userProfileCard.classList.add('hidden');
   elements.userProfileCard.innerHTML = '';
 }
@@ -326,9 +356,12 @@ function renderTimeline(session) {
 }
 
 function renderStatusPill(session) {
-  const status = session?.status || 'idle';
-  elements.sessionStatusPill.textContent = status;
-  elements.sessionStatusPill.dataset.state = status;
+  const baseStatus = session?.status || 'idle';
+  const displayStatus = baseStatus === 'pending' && state.uiPhase === 'verifying'
+    ? 'verifying'
+    : baseStatus;
+  elements.sessionStatusPill.textContent = displayStatus;
+  elements.sessionStatusPill.dataset.state = displayStatus;
 }
 
 function updateNewSessionButton(session) {
@@ -338,6 +371,20 @@ function updateNewSessionButton(session) {
   } else {
     elements.newSessionButton.classList.add('hidden');
   }
+}
+
+function updateSimulateScanButton(session) {
+  const canSimulate = Boolean(session && session.status === 'pending' && state.postmanExample?.body);
+  if (!canSimulate) {
+    elements.simulateScanButton.classList.add('hidden');
+    elements.simulateScanButton.disabled = true;
+    elements.simulateScanButton.textContent = 'Simulate Scan';
+    return;
+  }
+
+  elements.simulateScanButton.classList.remove('hidden');
+  elements.simulateScanButton.disabled = state.uiPhase === 'verifying';
+  elements.simulateScanButton.textContent = state.uiPhase === 'verifying' ? 'Verifying...' : 'Simulate Scan';
 }
 
 function renderAll(session) {
@@ -351,15 +398,18 @@ function renderAll(session) {
   renderTimeline(session);
   renderStatusPill(session);
   updateNewSessionButton(session);
+  updateSimulateScanButton(session);
 }
 
 async function fetchBootstrap() {
   try {
-    const data = await safeFetchJson('/api/demo/bootstrap');
+    const data = await safeFetchJson(`${CONFIG.CLIENT_API_BASE}/api/demo/bootstrap`);
     renderBootstrap(data);
   } catch (error) {
     console.error('Bootstrap failed:', error);
-    elements.scanApiLabel.textContent = 'Unavailable';
+    elements.scanApiLabel.textContent = `${CONFIG.SNEEK_API_BASE}/sneek/scan`;
+    elements.postmanUrl.textContent = `${CONFIG.SNEEK_API_BASE}/sneek/scan`;
+    showToast('Client server unavailable.', 'error');
   }
 }
 
@@ -368,6 +418,7 @@ function resetSession() {
   state.sessionId = null;
   state.session = null;
   state.postmanExample = null;
+  state.uiPhase = 'idle';
   state.pollGeneration += 1;
   renderAll(null);
   elements.newSessionButton.classList.add('hidden');
@@ -380,7 +431,7 @@ async function createSession() {
   elements.loginButton.classList.add('generating');
 
   try {
-    const data = await safeFetchJson('/api/client/login', {
+    const data = await safeFetchJson(`${CONFIG.CLIENT_API_BASE}/generate-qr`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clientId: 'spotify_123' }),
@@ -392,7 +443,12 @@ async function createSession() {
 
     state.sessionId = data.session.sessionId;
     state.postmanExample = data.postmanExample;
+    if (state.postmanExample?.body) {
+      state.postmanExample.url = `${CONFIG.SNEEK_API_BASE}/sneek/scan`;
+    }
+    state.uiPhase = 'waiting_for_scan';
     renderAll(data.session);
+    showToast('Session created. Ready to scan.', 'success');
     startPolling();
   } catch (error) {
     console.error('Session creation failed:', error);
@@ -401,10 +457,37 @@ async function createSession() {
       <h3>Connection error</h3>
       <p>Could not create session. Check that the server is running and try again.</p>
     `;
+    showToast('Could not create session.', 'error');
   } finally {
     elements.loginButton.disabled = false;
     elements.loginButton.textContent = 'Login with Sneek';
     elements.loginButton.classList.remove('generating');
+  }
+}
+
+async function simulateScan() {
+  if (!state.postmanExample?.body || !state.sessionId) {
+    return;
+  }
+
+  state.uiPhase = 'verifying';
+  renderAll(state.session);
+  showToast('Simulated scan sent.');
+
+  try {
+    await safeFetchJson(`${CONFIG.SNEEK_API_BASE}/sneek/scan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state.postmanExample.body),
+    });
+
+    await pollSession();
+    showToast('Verification complete.', 'success');
+  } catch (error) {
+    console.error('Simulated scan failed:', error);
+    state.uiPhase = 'waiting_for_scan';
+    renderAll(state.session);
+    showToast('Simulated scan failed.', 'error');
   }
 }
 
@@ -414,14 +497,26 @@ async function pollSession() {
   const gen = state.pollGeneration;
 
   try {
-    const data = await safeFetchJson(`/api/client/session/${state.sessionId}`);
+    const data = await safeFetchJson(
+      `${CONFIG.CLIENT_API_BASE}/session-status?session_id=${encodeURIComponent(state.sessionId)}`,
+    );
 
     if (gen !== state.pollGeneration) return;
     if (!data.session) return;
 
     renderAll(data.session);
 
-    if (TERMINAL_STATUSES.includes(data.session.status)) {
+    if (data.session.status === 'pending' && state.uiPhase !== 'verifying') {
+      state.uiPhase = 'waiting_for_scan';
+    }
+    const isAuthenticated =
+      data.session.status === 'authenticated' || data.session.sessionState?.authenticated === true;
+
+    if (isAuthenticated) {
+      state.uiPhase = 'authenticated';
+    }
+
+    if (TERMINAL_STATUSES.includes(data.session.status) || isAuthenticated) {
       stopPolling();
     }
   } catch (error) {
@@ -447,6 +542,7 @@ async function init() {
   renderAll(null);
   elements.loginButton.addEventListener('click', createSession);
   elements.newSessionButton.addEventListener('click', createSession);
+  elements.simulateScanButton.addEventListener('click', simulateScan);
 }
 
 init();

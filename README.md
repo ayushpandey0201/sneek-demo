@@ -1,44 +1,143 @@
-# Sneek HMAC + K1 Demo
+# Sneek Auth
 
-Dummy full-stack prototype that simulates the proposed Sneek QR authentication flow:
+QR-based distributed authentication demo with explicit security gates.
 
-- Client backend creates a session with 60 second TTL
-- Client backend computes `HMAC-SHA256(client_id, K1)`
-- Payload is encrypted with a demo Sneek public key
-- Frontend renders the QR code and raw debug values
-- Postman can call the mock Sneek scan endpoint
-- Sneek verifies HMAC, KID, TTL, replay, and signed callback
-- Frontend polls until authentication succeeds or fails
+Sneek Auth is a full-stack demo that models a modern QR login protocol across two services: a **Client Server** and a **Sneek Server**. It focuses on how authentication messages are validated step-by-step, not on production hardening.
 
-## Run
+## Why this project exists
+
+Most auth demos stop at "it works." This one shows **why it should be trusted**:
+
+- clear protocol boundaries between two services
+- explicit verification gates (HMAC, KID, TTL, replay, callback signature)
+- inspectable auth timeline and session state in the UI
+
+## Demo Preview
+
+> Add screenshots/GIF here:
+>
+> - Login + QR generated
+> - Simulate scan
+> - Authenticated state with user profile
+
+## How it works
+
+1. User clicks **Login with Sneek** in the frontend.
+2. Client Server creates a short-lived session and QR payload (base64).
+3. Frontend shows the QR and starts polling session status.
+4. Sneek Server receives scan simulation.
+5. Sneek validates security gates:
+   - HMAC integrity
+   - KID/origin
+   - session TTL
+   - replay protection
+6. Sneek sends a signed callback to Client Server.
+7. Client Server verifies callback signature and authenticates user.
+8. Frontend polling detects success and updates UI.
+
+## Security model (demo level)
+
+- **HMAC integrity check**: validates payload authenticity.
+- **KID/origin validation**: ensures expected client origin context.
+- **Session TTL**: short-lived session window to reduce abuse.
+- **Replay protection**: prevents QR/session reuse.
+- **Signed callback verification**: client trusts only valid Sneek callbacks.
+
+## Architecture
+
+```text
+Frontend (Vanilla JS)
+   |
+   | generate-qr, session-status
+   v
+Client Server :3000
+   ^
+   | signed callback + introspection
+   v
+Sneek Server :4000
+   ^
+   | simulate scan
+   |
+Frontend (Simulate Scan button)
+```
+
+## Tech stack
+
+- Node.js
+- Express
+- Vanilla JavaScript (frontend)
+- In-memory session store
+- Node `crypto` (SHA256 / HMAC)
+
+## Run locally
+
+### 1) Install dependencies
 
 ```bash
 npm install
-npm start
 ```
 
-Open [http://localhost:3030](http://localhost:3030).
+### 2) Start Client Server (port 3000)
 
-## Main Files
-
-- `server.js` - Express server plus dummy client backend and dummy Sneek backend
-- `public/index.html` - Browser UI
-- `public/app.js` - Polling, copy helpers, and UI rendering
-- `public/styles.css` - Demo styling
-
-## Postman Flow
-
-1. Open the page and click `Login with Sneak`
-2. Copy the generated request body from the page
-3. Send it to `POST http://localhost:3030/api/sneek/scan`
-4. Watch the frontend update to `Authentication Successful`
-
-## Important Note
-
-This demo uses a proper HMAC helper:
-
-```js
-crypto.createHmac('sha256', k1).update(client_id).digest('hex')
+```bash
+node client-server/server.js
 ```
 
-If you want to test the exact concatenation model `SHA256(K1 + client_id)` instead, only the HMAC helper in `server.js` needs to change.
+### 3) Start Sneek Server (port 4000)
+
+```bash
+CLIENT_SERVER_URL=http://localhost:3000 node sneek-server/server.js
+```
+
+### 4) Start frontend host
+
+Use your current static host setup in this repo and open the UI in browser.  
+Frontend is configured to call:
+
+- `http://localhost:3000` (client APIs)
+- `http://localhost:4000` (sneek APIs)
+
+## Folder structure
+
+```text
+client-server/
+  server.js
+  src/
+    client/
+      client.routes.js
+      client.service.js
+    shared/
+      crypto.js
+      sessionStore.js
+      securityChecks.js
+
+sneek-server/
+  server.js
+  src/
+    sneek/
+      sneek.routes.js
+      sneek.service.js
+    shared/
+      crypto.js
+      securityChecks.js
+
+public/
+  index.html
+  app.js
+  styles.css
+```
+
+## Highlights / key learnings
+
+- designing auth as a protocol, not just endpoints
+- separating trust boundaries across services
+- making security checks explicit and reusable
+- balancing simplicity (demo) with realistic verification flow
+
+## Limitations (intentional)
+
+- demo system, not production-ready
+- uses **base64** payload encoding (not real encryption)
+- no database (in-memory state only)
+- no JWT/session persistence across restarts
+- minimal operational hardening (rate limits, key rotation, observability, etc.)
