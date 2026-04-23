@@ -45,7 +45,7 @@
           </div>
           <p class="section-text">
             Clicking this button asks the demo client backend to generate a session, compute the
-            HMAC with K1, encrypt the payload with Sneek's public key, and return a QR code.
+            HMAC with K1, base64-encode the payload, and return a QR code.
           </p>
           <div class="quick-facts" id="quickFacts">
             <div class="fact">
@@ -94,14 +94,14 @@
             </div>
             <div class="copy-block">
               <div class="copy-heading">
-                <span>Encrypted Blob in QR</span>
-                <button class="ghost-button" data-copy-target="encryptedBlobValue" aria-label="Copy encrypted blob">Copy</button>
+                <span>Base64 Blob in QR</span>
+                <button class="ghost-button" data-copy-target="encryptedBlobValue" aria-label="Copy base64 blob">Copy</button>
               </div>
               <code id="encryptedBlobValue">Not generated yet</code>
             </div>
             <div class="copy-block">
               <div class="copy-heading">
-                <span>Payload preview before encryption</span>
+                <span>Payload preview before base64 encoding</span>
               </div>
               <pre id="payloadPreview">No payload yet</pre>
             </div>
@@ -115,6 +115,7 @@
                 <p class="section-label">Step 5</p>
                 <h2>Postman Request</h2>
               </div>
+              <button id="simulateScanButton" class="secondary-button hidden">Simulate Scan</button>
             </div>
             <p class="section-text">
               Use this body in Postman to simulate the Sneek mobile app scanning the QR.
@@ -143,8 +144,8 @@
               </div>
             </div>
             <div id="resultCard" class="result-card result-idle" role="status" aria-live="polite">
-              <h3>Waiting for authentication</h3>
-              <p>The frontend is polling the client backend for session updates.</p>
+              <h3>Waiting for scan</h3>
+              <p>Generate a session and run a scan to continue the authentication flow.</p>
             </div>
             <div id="userProfileCard" class="user-profile hidden"></div>
           </article>
@@ -176,6 +177,7 @@
         </section>
       </main>
     </div>
+    <div id="toastRoot" class="toast-root" aria-live="polite" aria-atomic="true"></div>
 
     <template id="gateTemplate">
       <div class="gate-card">
