@@ -13,20 +13,20 @@ const state = {
 };
 
 const coreGates = {
-  mobileToken: 'Mobile token',
-  decrypt: 'Decrypt QR',
-  hmac: 'HMAC verify',
-  kid: 'KID verify',
-  sessionTtl: 'TTL verify',
-  replay: 'Replay check',
-  callbackSignature: 'Callback signature',
+  mobileToken: 'Client token check',
+  decrypt: 'QR payload decode',
+  hmac: 'Payload integrity check',
+  kid: 'Client identity check',
+  sessionTtl: 'Session TTL check',
+  replay: 'Replay protection',
+  callbackSignature: 'Session callback check',
 };
 
 const crossGates = {
-  clientSessionMatch: 'Session cross-check',
-  clientPayloadMatch: 'Payload digest match',
-  clientBlobMatch: 'Blob digest match',
-  clientVerificationSummary: 'Cross-verify summary',
+  clientSessionMatch: 'Session consistency check',
+  clientPayloadMatch: 'Payload consistency check',
+  clientBlobMatch: 'Blob consistency check',
+  clientVerificationSummary: 'Verification summary check',
 };
 
 const allGateLabels = { ...coreGates, ...crossGates };
@@ -323,20 +323,43 @@ function renderTimeline(session) {
   }
 
   session.auditTrail.forEach((entry) => {
+    const normalizedEntry = normalizeAuditEntry(entry);
     const node = elements.timelineItemTemplate.content.firstElementChild.cloneNode(true);
-    node.querySelector('.timeline-step').textContent = entry.step;
+    node.querySelector('.timeline-step').textContent = normalizedEntry.step;
 
     const statusNode = node.querySelector('.timeline-status');
-    statusNode.textContent = entry.status;
-    statusNode.dataset.state = entry.status;
+    statusNode.textContent = normalizedEntry.status;
+    statusNode.dataset.state = normalizedEntry.status;
 
     const dotNode = node.querySelector('.timeline-dot');
-    dotNode.dataset.state = entry.status;
+    dotNode.dataset.state = normalizedEntry.status;
 
-    node.querySelector('.timeline-details').textContent = entry.details;
-    node.querySelector('.timeline-at').textContent = new Date(entry.at).toLocaleTimeString();
+    node.querySelector('.timeline-details').textContent = normalizedEntry.details;
+    node.querySelector('.timeline-at').textContent = new Date(normalizedEntry.at).toLocaleTimeString();
     elements.timeline.appendChild(node);
   });
+}
+
+function normalizeAuditEntry(entry) {
+  const stepMap = {
+    login_click: 'session_start',
+    client_backend: 'session_create',
+    hmac_generate: 'integrity_signature',
+    encrypt_payload: 'payload_encode',
+  };
+  const step = stepMap[entry?.step] || entry?.step || 'session_event';
+  const status = entry?.status || 'pending';
+  const details = String(entry?.details || '')
+    .replaceAll('Login with Sneak', 'Generate Login QR')
+    .replaceAll('Sneek', 'client app')
+    .replaceAll('sneek', 'client app');
+
+  return {
+    ...entry,
+    step,
+    status,
+    details,
+  };
 }
 
 function renderStatusPill(session) {
