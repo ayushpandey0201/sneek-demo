@@ -1,7 +1,6 @@
 const TERMINAL_STATUSES = ['authenticated', 'expired', 'rejected'];
 const CONFIG = {
   CLIENT_API_BASE: window.__CONFIG__?.CLIENT_API_BASE || 'http://localhost:3000',
-  SNEEK_API_BASE: window.__CONFIG__?.SNEEK_API_BASE || 'http://localhost:4000',
 };
 
 const state = {
@@ -9,7 +8,6 @@ const state = {
   pollTimer: null,
   session: null,
   bootstrap: null,
-  postmanExample: null,
   pollGeneration: 0,
   uiPhase: 'idle',
 };
@@ -44,9 +42,6 @@ const elements = {
   hmacValue: document.getElementById('hmacValue'),
   encryptedBlobValue: document.getElementById('encryptedBlobValue'),
   payloadPreview: document.getElementById('payloadPreview'),
-  postmanUrl: document.getElementById('postmanUrl'),
-  postmanBody: document.getElementById('postmanBody'),
-  simulateScanButton: document.getElementById('simulateScanButton'),
   resultCard: document.getElementById('resultCard'),
   userProfileCard: document.getElementById('userProfileCard'),
   gateContainer: document.getElementById('gateContainer'),
@@ -125,8 +120,7 @@ function renderBootstrap(data) {
   state.bootstrap = data;
   elements.clientIdLabel.textContent = data.demoClient?.clientId || '—';
   elements.kidLabel.textContent = data.demoClient?.kid || '—';
-  elements.scanApiLabel.textContent = `${CONFIG.SNEEK_API_BASE}/sneek/scan`;
-  elements.postmanUrl.textContent = `${CONFIG.SNEEK_API_BASE}/sneek/scan`;
+  elements.scanApiLabel.textContent = CONFIG.CLIENT_API_BASE;
 }
 
 function renderQr(session) {
@@ -137,7 +131,7 @@ function renderQr(session) {
 
   const img = document.createElement('img');
   img.src = session.qrCodeDataUrl;
-  img.alt = 'Sneek QR code';
+  img.alt = 'QR code';
   img.className = 'qr-image';
   elements.qrWrap.innerHTML = '';
   elements.qrWrap.appendChild(img);
@@ -170,22 +164,12 @@ function renderPayload(session) {
   elements.payloadPreview.textContent = session.payloadPreview ? prettyJson(session.payloadPreview) : '';
 }
 
-function renderPostmanExample() {
-  if (!state.postmanExample) {
-    elements.postmanBody.textContent = 'Generate a session first.';
-    return;
-  }
-
-  elements.postmanUrl.textContent = state.postmanExample.url || '';
-  elements.postmanBody.textContent = prettyJson(state.postmanExample.body);
-}
-
 function renderResult(session) {
   if (!session) {
     elements.resultCard.className = 'result-card result-idle';
     elements.resultCard.innerHTML = `
-      <h3>Waiting for scan</h3>
-      <p>Generate a session and run a scan to continue the authentication flow.</p>
+      <h3>Waiting for session</h3>
+      <p>Generate a session to begin.</p>
     `;
     elements.userProfileCard.classList.add('hidden');
     elements.userProfileCard.innerHTML = '';
@@ -198,7 +182,7 @@ function renderResult(session) {
     const h3 = document.createElement('h3');
     h3.textContent = 'Authenticated';
     const p = document.createElement('p');
-    p.textContent = 'Client backend verified the signed callback and issued a frontend session token.';
+    p.textContent = 'Client backend verified the session and issued a frontend session token.';
     const code = document.createElement('code');
     code.textContent = session.sessionToken || '';
 
@@ -247,7 +231,7 @@ function renderResult(session) {
     elements.resultCard.className = 'result-card result-error';
     elements.resultCard.innerHTML = `
       <h3>Authentication rejected</h3>
-      <p>At least one verification gate failed. Check the timeline below for the first failing step.</p>
+      <p>At least one verification gate failed. Check the timeline below for details.</p>
     `;
     elements.userProfileCard.classList.add('hidden');
     elements.userProfileCard.innerHTML = '';
@@ -258,13 +242,13 @@ function renderResult(session) {
     elements.resultCard.className = 'result-card result-pending';
     elements.resultCard.innerHTML = `
       <h3>Verifying...</h3>
-      <p>Sneek is validating the payload and callback signature.</p>
+      <p>Backend is validating the payload.</p>
     `;
   } else {
     elements.resultCard.className = 'result-card result-pending';
     elements.resultCard.innerHTML = `
       <h3>Waiting for scan</h3>
-      <p>The session is ready. Use Simulate Scan to continue.</p>
+      <p>The session is ready. Complete the scan flow from the connected app.</p>
     `;
   }
   elements.userProfileCard.classList.add('hidden');
@@ -373,32 +357,16 @@ function updateNewSessionButton(session) {
   }
 }
 
-function updateSimulateScanButton(session) {
-  const canSimulate = Boolean(session && session.status === 'pending' && state.postmanExample?.body);
-  if (!canSimulate) {
-    elements.simulateScanButton.classList.add('hidden');
-    elements.simulateScanButton.disabled = true;
-    elements.simulateScanButton.textContent = 'Simulate Scan';
-    return;
-  }
-
-  elements.simulateScanButton.classList.remove('hidden');
-  elements.simulateScanButton.disabled = state.uiPhase === 'verifying';
-  elements.simulateScanButton.textContent = state.uiPhase === 'verifying' ? 'Verifying...' : 'Simulate Scan';
-}
-
 function renderAll(session) {
   state.session = session;
   renderQr(session);
   renderSessionMeta(session);
   renderPayload(session);
-  renderPostmanExample();
   renderResult(session);
   renderGates(session);
   renderTimeline(session);
   renderStatusPill(session);
   updateNewSessionButton(session);
-  updateSimulateScanButton(session);
 }
 
 async function fetchBootstrap() {
@@ -407,8 +375,7 @@ async function fetchBootstrap() {
     renderBootstrap(data);
   } catch (error) {
     console.error('Bootstrap failed:', error);
-    elements.scanApiLabel.textContent = `${CONFIG.SNEEK_API_BASE}/sneek/scan`;
-    elements.postmanUrl.textContent = `${CONFIG.SNEEK_API_BASE}/sneek/scan`;
+    elements.scanApiLabel.textContent = CONFIG.CLIENT_API_BASE;
     showToast('Client server unavailable.', 'error');
   }
 }
@@ -417,7 +384,6 @@ function resetSession() {
   stopPolling();
   state.sessionId = null;
   state.session = null;
-  state.postmanExample = null;
   state.uiPhase = 'idle';
   state.pollGeneration += 1;
   renderAll(null);
@@ -442,10 +408,6 @@ async function createSession() {
     }
 
     state.sessionId = data.session.sessionId;
-    state.postmanExample = data.postmanExample;
-    if (state.postmanExample?.body) {
-      state.postmanExample.url = `${CONFIG.SNEEK_API_BASE}/sneek/scan`;
-    }
     state.uiPhase = 'waiting_for_scan';
     renderAll(data.session);
     showToast('Session created. Ready to scan.', 'success');
@@ -460,34 +422,8 @@ async function createSession() {
     showToast('Could not create session.', 'error');
   } finally {
     elements.loginButton.disabled = false;
-    elements.loginButton.textContent = 'Login with Sneek';
+    elements.loginButton.textContent = 'Generate Login QR';
     elements.loginButton.classList.remove('generating');
-  }
-}
-
-async function simulateScan() {
-  if (!state.postmanExample?.body || !state.sessionId) {
-    return;
-  }
-
-  state.uiPhase = 'verifying';
-  renderAll(state.session);
-  showToast('Simulated scan sent.');
-
-  try {
-    await safeFetchJson(`${CONFIG.SNEEK_API_BASE}/sneek/scan`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(state.postmanExample.body),
-    });
-
-    await pollSession();
-    showToast('Verification complete.', 'success');
-  } catch (error) {
-    console.error('Simulated scan failed:', error);
-    state.uiPhase = 'waiting_for_scan';
-    renderAll(state.session);
-    showToast('Simulated scan failed.', 'error');
   }
 }
 
@@ -542,7 +478,6 @@ async function init() {
   renderAll(null);
   elements.loginButton.addEventListener('click', createSession);
   elements.newSessionButton.addEventListener('click', createSession);
-  elements.simulateScanButton.addEventListener('click', simulateScan);
 }
 
 init();

@@ -3,30 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sneek HMAC + K1 Demo</title>
+    <title>Client QR Auth Demo</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <div class="page-shell">
       <header class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Dummy full-stack prototype</p>
-          <h1>Sneek Authentication Demo</h1>
+          <p class="eyebrow">Client-side web server</p>
+          <h1>Client QR Authentication Demo</h1>
           <p class="lede">
-            This demo simulates your proposed flow: client backend creates an HMAC with K1,
-            encrypts the payload for Sneek, renders a QR, and waits for Sneek to verify and
-            callback.
+            This frontend is fully client-facing and talks only to the client backend hosted at
+            <code>md.sneek.in</code>. It creates QR login sessions and tracks session state.
           </p>
         </div>
         <div class="hero-card">
-          <p class="hero-label">Core verification gates</p>
+          <p class="hero-label">Client backend checks</p>
           <ul class="hero-list">
-            <li>HMAC check</li>
-            <li>KID/origin check</li>
-            <li>Session TTL check</li>
-            <li>Replay prevention</li>
-            <li>Signed callback check</li>
-            <li>Cross-verification (session, payload, blob)</li>
+            <li>Session creation</li>
+            <li>QR payload generation</li>
+            <li>Session TTL validation</li>
+            <li>Session status polling</li>
+            <li>Client-side state updates</li>
           </ul>
         </div>
       </header>
@@ -40,12 +38,12 @@
             </div>
             <div class="panel-actions">
               <button id="newSessionButton" class="secondary-button hidden">New Session</button>
-              <button id="loginButton" class="primary-button">Login with Sneek</button>
+              <button id="loginButton" class="primary-button">Generate Login QR</button>
             </div>
           </div>
           <p class="section-text">
-            Clicking this button asks the demo client backend to generate a session, compute the
-            HMAC with K1, base64-encode the payload, and return a QR code.
+            Clicking this button requests the client backend to create a session and return the QR
+            payload.
           </p>
           <div class="quick-facts" id="quickFacts">
             <div class="fact">
@@ -57,7 +55,7 @@
               <strong id="kidLabel">spotify.com</strong>
             </div>
             <div class="fact">
-              <span class="fact-label">Scan API</span>
+              <span class="fact-label">Backend API</span>
               <strong id="scanApiLabel">Loading...</strong>
             </div>
           </div>
@@ -67,7 +65,7 @@
           <article class="panel qr-panel">
             <div class="panel-heading compact">
               <div>
-                <p class="section-label">Steps 2 to 4</p>
+                <p class="section-label">Step 2</p>
                 <h2>Generated QR</h2>
               </div>
               <span class="status-pill" id="sessionStatusPill">Idle</span>
@@ -94,58 +92,31 @@
             </div>
             <div class="copy-block">
               <div class="copy-heading">
-                <span>Base64 Blob in QR</span>
+                <span>QR Blob</span>
                 <button class="ghost-button" data-copy-target="encryptedBlobValue" aria-label="Copy base64 blob">Copy</button>
               </div>
               <code id="encryptedBlobValue">Not generated yet</code>
             </div>
             <div class="copy-block">
               <div class="copy-heading">
-                <span>Payload preview before base64 encoding</span>
+                <span>Payload preview</span>
               </div>
               <pre id="payloadPreview">No payload yet</pre>
             </div>
           </article>
         </section>
 
-        <section class="grid two-up">
-          <article class="panel postman-panel">
-            <div class="panel-heading compact">
-              <div>
-                <p class="section-label">Step 5</p>
-                <h2>Postman Request</h2>
-              </div>
-              <button id="simulateScanButton" class="secondary-button hidden">Simulate Scan</button>
-            </div>
-            <p class="section-text">
-              Use this body in Postman to simulate the Sneek mobile app scanning the QR.
-            </p>
-            <div class="copy-block">
-              <div class="copy-heading">
-                <span>POST target</span>
-                <button class="ghost-button" data-copy-target="postmanUrl" aria-label="Copy POST target URL">Copy</button>
-              </div>
-              <code id="postmanUrl">Loading...</code>
-            </div>
-            <div class="copy-block">
-              <div class="copy-heading">
-                <span>JSON body</span>
-                <button class="ghost-button" data-copy-target="postmanBody" aria-label="Copy JSON body">Copy</button>
-              </div>
-              <pre id="postmanBody">Generate a session first.</pre>
-            </div>
-          </article>
-
+        <section class="grid one-up">
           <article class="panel">
             <div class="panel-heading compact">
               <div>
                 <p class="section-label">Current result</p>
-                <h2>Frontend Listener</h2>
+                <h2>Frontend Session State</h2>
               </div>
             </div>
             <div id="resultCard" class="result-card result-idle" role="status" aria-live="polite">
-              <h3>Waiting for scan</h3>
-              <p>Generate a session and run a scan to continue the authentication flow.</p>
+              <h3>Waiting for session</h3>
+              <p>Generate a QR session to start.</p>
             </div>
             <div id="userProfileCard" class="user-profile hidden"></div>
           </article>
@@ -155,7 +126,7 @@
           <div class="panel-heading compact">
             <div>
               <p class="section-label">Verification details</p>
-              <h2>What is happening internally</h2>
+              <h2>Backend progress</h2>
             </div>
           </div>
           <div class="gate-summary" id="gateSummary" aria-live="polite">
@@ -202,8 +173,7 @@
 
     <script>
       window.__CONFIG__ = {
-        CLIENT_API_BASE: 'https://md.sneek.in',
-        SNEEK_API_BASE: 'https://api.sneek.in'
+        CLIENT_API_BASE: 'https://md.sneek.in'
       };
     </script>
     <script src="/app.js" defer></script>
