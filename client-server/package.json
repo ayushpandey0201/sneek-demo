@@ -4,6 +4,7 @@
   "private": true,
   "description": "Client backend API for md.sneek.in",
   "dependencies": {
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "qrcode": "^1.5.4"
   }
 }

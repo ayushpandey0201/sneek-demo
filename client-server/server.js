@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const express = require('express');
+const QRCode = require('qrcode');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -91,19 +92,16 @@ function serializeSession(session) {
   };
 }
 
-function createQrDataUrl(payload) {
-  const content = escapeXml(`SNEEK:${JSON.stringify(payload)}`);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240"><rect width="240" height="240" fill="#fff"/><rect x="12" y="12" width="216" height="216" fill="#111"/><rect x="28" y="28" width="184" height="184" fill="#fff"/><text x="24" y="220" font-size="8" font-family="monospace" fill="#111">${content.slice(0, 80)}</text></svg>`;
-  return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`;
-}
-
-function escapeXml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
+async function createQrDataUrl(encryptedBlob) {
+  return QRCode.toDataURL(encryptedBlob, {
+    errorCorrectionLevel: 'M',
+    margin: 1,
+    scale: 8,
+    color: {
+      dark: '#101828',
+      light: '#ffffff',
+    },
+  });
 }
 
 app.use(express.json({ limit: '1mb' }));
@@ -127,7 +125,7 @@ app.get('/api/demo/bootstrap', (_req, res) => {
   });
 });
 
-app.post('/generate-qr', (req, res) => {
+app.post('/generate-qr', async (req, res) => {
   const clientId = req.body?.clientId || req.body?.client_id;
   if (clientId !== CLIENT_ID) {
     return res.status(400).json({ ok: false, reason: 'invalid_client_id' });
@@ -155,7 +153,7 @@ app.post('/generate-qr', (req, res) => {
     payloadCore,
     hmac,
     encryptedBlob,
-    qrCodeDataUrl: createQrDataUrl(qrPayload),
+    qrCodeDataUrl: await createQrDataUrl(encryptedBlob),
     verification: {},
     userProfile: null,
     sharedInfo: null,
