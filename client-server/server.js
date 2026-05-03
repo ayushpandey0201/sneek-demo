@@ -1,3 +1,4 @@
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const crypto = require('crypto');
 const express = require('express');
 const QRCode = require('qrcode');
@@ -268,6 +269,19 @@ app.post('/sneek/callback', (req, res) => {
 
   session.status = 'authenticated';
   session.verification = body.verification || session.verification || {};
+  
+  // Sneek Server sends these as 'pending' in the callback payload.
+  // Since we just successfully verified the HMAC signature above, we manually mark them as passed.
+  session.verification.callbackSignature = 'passed';
+  
+  // If all core gates passed, mark the summary as passed.
+  const allPassed = Object.values(session.verification).every(
+    (status) => status === 'passed' || status === 'skipped'
+  );
+  if (allPassed) {
+    session.verification.crossVerifySummary = 'passed';
+  }
+
   session.userProfile = body.userProfile || session.userProfile || null;
   session.sharedInfo = body.sharedInfo || session.sharedInfo || null;
   session.auditTrail.push({
