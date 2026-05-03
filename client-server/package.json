@@ -1,0 +1,9 @@
+{
+  "name": "sneek-client-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Client backend API for md.sneek.in",
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
