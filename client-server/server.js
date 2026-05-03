@@ -14,6 +14,7 @@ const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 60_000);
 const CORS_ALLOWLIST = new Set([
   'https://sneekserver.vercel.app',
   'https://sneek-demo-frontend.vercel.app',
+  'https://sneek-hmac-demo.vercel.app',
   'https://mobile.sneek.in',
   'https://web.md.sneek.in',
   'https://api.sneek.in',
