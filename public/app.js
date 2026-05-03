@@ -17,16 +17,17 @@ const coreGates = {
   decrypt: 'QR payload decode',
   hmac: 'Payload integrity check',
   kid: 'Client identity check',
-  sessionTtl: 'Session TTL check',
+  ttl: 'Session TTL check',
   replay: 'Replay protection',
+  origin: 'Origin check',
   callbackSignature: 'Session callback check',
 };
 
 const crossGates = {
-  clientSessionMatch: 'Session consistency check',
-  clientPayloadMatch: 'Payload consistency check',
-  clientBlobMatch: 'Blob consistency check',
-  clientVerificationSummary: 'Verification summary check',
+  sessionCrossCheck: 'Session consistency check',
+  payloadDigestMatch: 'Payload consistency check',
+  blobDigestMatch: 'Blob consistency check',
+  crossVerifySummary: 'Verification summary check',
 };
 
 const allGateLabels = { ...coreGates, ...crossGates };
